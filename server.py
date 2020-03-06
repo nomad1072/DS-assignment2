@@ -31,6 +31,11 @@ def place_message_in_buffer(id):
         if id > messageBuffer[i] and id < messageBuffer[i+1]:
             messageBuffer = messageBuffer[:i+1] + [id] + messageBuffer[i+1:]
             return
+
+    if messageBuffer[0] is not None and id < messageBuffer[0]:
+        messageBuffer.insert(0, id)
+        return
+
     messageBuffer.append(id)
 
 def add_to_buffer(message_id):
@@ -59,7 +64,7 @@ def event_listener():
         message = receivedData[0].decode('utf-8')
         destIp = receivedData[1][0]
         print('received', message)
-        if (message.split('-')[0]=='message'):
+        if (message.split('-')[0] == 'message'):
             if (int(message.split('-')[1]) <= globalCounter):
                 print('all good')
                 # Log Messages in the Buffer
@@ -69,15 +74,27 @@ def event_listener():
                 queue.qPush(queue_id, message)
             else:
                 print('need buffer and recovery')
-                add_to_buffer(int(message.split('-')[1]))
-                send_message("recovery-"+str(globalCounter), coordinatorIp)
+                id = message.split('-')[0]
+                if len(messageBuffer) > 0 and id > messageBuffer[0]:
+                    add_to_buffer(int(message.split('-')[1]))
+                    send_message("message-"+(messageBuffer[0])+"-"+serverIp, destIp)
+                    logBuffer.append(int(messageBuffer[0]))
+                    purge_item_buffer()
+                else:
+                    # buffer_message = "message-"
+                    add_to_buffer(id)
+                    send_message("recovery-"+str(globalCounter), coordinatorIp)
         elif (message.split('-')[0]=='globalSequence'):
             send_globalSequence(destIp)
         elif (message.split('-')[0]=='recovery'):
             # find message and send it
-            max_sequence_number = max(logBuffer)
-            send_message("message-"+(max_sequence_number+1)+"-"+serverIp, destIp)
-            purge_item_buffer()
+            if len(logBuffer) > 0:
+                max_sequence_number = max(logBuffer) + 1
+            else:
+                max_sequence_number = 0
+
+            send_message("message-"+(max_sequence_number)+"-"+serverIp, destIp)
+            # purge_item_buffer()
 
 def globalSequence_listener():
     UDPServerSocket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
