@@ -12,10 +12,10 @@ import threading
 
 globalCounter = 0
 coordinator = 1
-peerList = ["128.110.153.81"]
+peerList = ["128.110.153.97","128.110.153.81","128.110.153.85","128.110.153.89","128.110.153.104"]
 listeningPort = 10001
-serverIp = "128.110.153.97"
-coordinatorIp = "128.110.153.81"
+serverIp = "128.110.153.85"
+coordinatorIp = "128.110.153.97"
 globalSequenceQueryPort = 10002
 clientPort = 10003
 bufferSize = 1024
@@ -31,10 +31,6 @@ def place_message_in_buffer(id):
         if id > messageBuffer[i] and id < messageBuffer[i+1]:
             messageBuffer = messageBuffer[:i+1] + [id] + messageBuffer[i+1:]
             return
-
-    if messageBuffer[0] is not None and id < messageBuffer[0]:
-        messageBuffer.insert(0, id)
-        return
 
     messageBuffer.append(id)
 
@@ -65,36 +61,35 @@ def event_listener():
         destIp = receivedData[1][0]
         print('received', message)
         if (message.split('-')[0] == 'message'):
-            if (int(message.split('-')[1]) <= globalCounter):
-                print('all good')
+            if (int(message.split('-')[1]) <= globalCounter+1):
+                print('directly Queued')
                 # Log Messages in the Buffer
                 logBuffer.append(int(message.split('-')[1]))
-                print('Log Buffer Total Order: ', logBuffer)
+                incrementGlobalCounter()
+                # check message buffer
+                while (len(messageBuffer)>0):
+                  if (messageBuffer[0] == globalCounter+1):
+                    logBuffer.append(int(messageBuffer[0]))
+                    purge_item_buffer()
+                  else:
+                    send_message("recovery-"+str(globalCounter+1), coordinatorIp)
+                    break
                 # Push Message to fault tolerant Queue
                 queue.qPush(queue_id, message)
             else:
                 print('need buffer and recovery')
-                id = message.split('-')[0]
-                if len(messageBuffer) > 0 and id > messageBuffer[0]:
-                    add_to_buffer(int(message.split('-')[1]))
-                    send_message("message-"+(messageBuffer[0])+"-"+serverIp, destIp)
-                    logBuffer.append(int(messageBuffer[0]))
-                    purge_item_buffer()
-                else:
-                    # buffer_message = "message-"
-                    add_to_buffer(id)
-                    send_message("recovery-"+str(globalCounter), coordinatorIp)
+                id = message.split('-')[1]
+                add_to_buffer(int(message.split('-')[1]))
+                send_message("recovery-"+str(globalCounter+1), coordinatorIp)
         elif (message.split('-')[0]=='globalSequence'):
             send_globalSequence(destIp)
         elif (message.split('-')[0]=='recovery'):
             # find message and send it
-            if len(logBuffer) > 0:
-                max_sequence_number = max(logBuffer) + 1
-            else:
-                max_sequence_number = 0
-
-            send_message("message-"+(max_sequence_number)+"-"+serverIp, destIp)
+            id = message.split('-')[1]
+            send_message("message-"+id+"-"+serverIp, destIp)
             # purge_item_buffer()
+        print("logBuffer", logBuffer)
+        print("messageBuffer", messageBuffer)
 
 def globalSequence_listener():
     UDPServerSocket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
@@ -124,7 +119,7 @@ def send_globalSequence(destIp):
         UDPClientSocket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
         UDPClientSocket.settimeout(10)
         server_address = (destIp, globalSequenceQueryPort)
-        UDPClientSocket.sendto(str.encode("returnGlobalSequence-"+str(globalCounter), "utf-8"), server_address)
+        UDPClientSocket.sendto(str.encode("returnGlobalSequence-"+str(globalCounter+1), "utf-8"), server_address)
     except socket.timeout as err:
         serverTime = 'sendLoss'
 
@@ -192,8 +187,8 @@ if __name__ == '__main__':
     threading.Thread(target=client_listener).start()
     print('Running Consumer..')
     time.sleep(3)
-    getGlobalNumber()
+    #getGlobalNumber()
     time.sleep(3)
-    getGlobalNumber()
+    #getGlobalNumber()
     time.sleep(3)
-    getGlobalNumber()
+    #getGlobalNumber()
