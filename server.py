@@ -25,6 +25,9 @@ messageBuffer = list()
 logBuffer = list()
 clientQueue = queue.Queue()
 
+def fetchCoordinatorIP():
+    return peerList[globalCounter % len(peerList)]
+
 def place_message_in_buffer(id):
     global messageBuffer
     for i in range(len(messageBuffer) - 1):
@@ -72,6 +75,7 @@ def event_listener():
                     logBuffer.append(int(messageBuffer[0]))
                     purge_item_buffer()
                   else:
+                    coordinatorIp = fetchCoordinatorIP()
                     send_message("recovery-"+str(globalCounter+1), coordinatorIp)
                     break
                 # Push Message to fault tolerant Queue
@@ -80,6 +84,7 @@ def event_listener():
                 print('need buffer and recovery')
                 id = message.split('-')[1]
                 add_to_buffer(int(message.split('-')[1]))
+                coordinatorIp = fetchCoordinatorIP()
                 send_message("recovery-"+str(globalCounter+1), coordinatorIp)
         elif (message.split('-')[0]=='globalSequence'):
             send_globalSequence(destIp)
@@ -150,6 +155,7 @@ def getGlobalNumber():
     try:
         UDPSendSocket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
         UDPSendSocket.settimeout(10)
+        coordinatorIp = fetchCoordinatorIP()
         server_address = (coordinatorIp, globalSequenceQueryPort)
         UDPSendSocket.sendto(str.encode("globalSequence-0", "utf-8"), server_address)
         print('gS msg sent', server_address)
